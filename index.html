@@ -112,6 +112,7 @@ svg{width:100%;height:auto;display:block}
 <div id="app"></div>
 <nav class="tabs" id="nav" hidden></nav>
 <div id="modal"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ============ Config de l'événement (tout ce qui est spécifique à CETTE course) ============ */
 /* Un profil sportif (générique) peut un jour préparer plusieurs événements comme celui-ci.
@@ -146,9 +147,12 @@ function eventDef(id) {
 }
 function setActiveEvent(id) { const d = eventDef(id); if (d) EVENT = d; return d; }
 const KEY = 'ultra-morzine-v2';
+const SUPABASE_URL = 'https://iumxvuoljkoabqamyxye.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_2CTXYLJpwTQVXxj-U0KRGQ_Sj9eNeKq';
+const sb = (typeof supabase !== 'undefined') ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 /* Liste de suggestions pour "quels sports pratiques-tu" — l'utilisateur peut aussi taper autre chose. */
-const SPORTS_LIST = ['Course à pied','Trail','Triathlon','Duathlon','Natation','Cyclisme / Vélo','VTT','Musculation','CrossFit',
+const SPORTS_LIST = ['Course à pied','Trail','Triathlon','Duathlon','Natation','Cyclisme / Vélo','VTT','Musculation','CrossFit','Street workout',
   'Haltérophilie','Football','Rugby','Handball','Basketball','Volleyball','Tennis','Badminton','Squash','Tennis de table',
   'Boxe','Judo','Karaté','Taekwondo','MMA','Lutte','Jiu-jitsu brésilien','Escalade','Ski alpin','Ski de fond','Snowboard',
   'Randonnée','Alpinisme','Golf','Aviron','Kayak / Canoë','Voile','Planche à voile','Surf','Plongée','Équitation','Danse',
@@ -223,6 +227,9 @@ function assemblePlan(aiWeeks, overrides, startIdx) {
 let S = {v:2, profile:null, events:{}, customEvents:{}, viewEventId:null, share:true, updated:0};
 let PLAN = [], tab = 'sem', cur = weekOf(new Date()), vw = cur, openId = null;
 let GROUP = [], gOpen = null, gWeek = cur, groupSub = null, lastSum = '';
+let authMode = null, authMsg = '';
+let confirmDeleteEventId = null; // double vérification avant de supprimer une course qui a déjà un plan
+let eventMenuOpen = false; // petit menu "⋮" à côté du titre, visible sur tous les écrans d'une course
 
 // Progression sur l'événement courant (séances faites, semaines allégées...).
 // Séparée du profil sportif : un même profil pourra un jour suivre plusieurs événements.
@@ -248,23 +255,34 @@ function syncActiveEvent() {
 }
 
 const Store = {
-  ok:false, uid:null, db:null, canWrite:true,
+  ok:false, uid:null, email:null,
   async init() {
+    if (!sb) return;
     try {
-      if (typeof claude === 'undefined') return;
-      const u = await claude.use('user');
-      this.uid = u ? await u.id() : null;
-      if (u) { const c = await u.can('data.write'); this.canWrite = c !== false; }
-      this.db = await claude.use('db');
-    } catch (e) { this.db = null; }
-    this.ok = !!(this.db && this.uid);
+      const { data: { session } } = await sb.auth.getSession();
+      this.uid = session ? session.user.id : null;
+      this.email = session ? session.user.email : null;
+    } catch (e) {}
+    this.ok = !!this.uid;
   },
-  mineRef() { return this.db.doc('data/users/' + this.uid + '/app'); },
-  async loadMine() { const s = await this.mineRef().get(); return s.exists ? s.data() : null; },
-  async saveMine(state) { await this.mineRef().set({json: JSON.stringify(state), updated: state.updated}); },
-  async publish(sum) { const ref = this.db.doc('athletes/' + this.uid); if (sum) await ref.set(sum); else await ref.delete(); },
-  subscribe(cb) { return this.db.collection('athletes').onSnapshot(s => cb(s.docs.map(d => ({id:d.id, data:d.data()}))), () => {}); }
+  async loadMine() {
+    const { data, error } = await sb.from('app_data').select('json, updated').eq('user_id', this.uid).maybeSingle();
+    if (error || !data) return null;
+    return data;
+  },
+  async saveMine(state) { await sb.from('app_data').upsert({user_id: this.uid, json: JSON.stringify(state), updated: state.updated}); },
+  async publish(sum) {
+    if (sum) await sb.from('athletes').upsert({user_id: this.uid, data: sum});
+    else await sb.from('athletes').delete().eq('user_id', this.uid);
+  },
+  subscribe(cb) {
+    const load = () => sb.from('athletes').select('user_id, data').then(({data}) => cb((data || []).map(d => ({id: d.user_id, data: d.data}))));
+    load();
+    const channel = sb.channel('athletes-changes').on('postgres_changes', {event:'*', schema:'public', table:'athletes'}, load).subscribe();
+    return { unsubscribe: () => sb.removeChannel(channel) };
+  }
 };
+function noNet() { authMsg = 'Connexion internet nécessaire pour cette action.'; render(); }
 
 let saveT = null, saving = false, dirty = false;
 function persist() {
@@ -280,7 +298,7 @@ async function flush() {
     // Le groupe ne suit que l'Ultra Morzine (l'objectif commun) : on partage toujours celle-ci,
     // quelle que soit la course affichée à l'écran — une seule doc Firestore par personne.
     const morzineId = 'ultra-morzine-2027';
-    if (Store.canWrite && S.profile && S.events[morzineId] && S.events[morzineId].plan) {
+    if (S.profile && S.events[morzineId] && S.events[morzineId].plan) {
       const keepEvent = EVENT, keepPlan = PLAN;
       setActiveEvent(morzineId);
       PLAN = assemblePlan(ev().plan, ev().overrides, ev().startIdx);
@@ -380,7 +398,18 @@ function chart(plan, doneBy, curW) {
 /* ============ Vues ============ */
 function head() {
   const left = Math.max(0, dayDiff(EVENT.race, new Date()));
-  return `<div class="top"><div><h1>${esc(EVENT.shortName)}</h1><div class="sub">${esc(S.profile.name)} · ${EVENT.dateLabel}</div></div><div class="count">J-${left}<small>avant le départ</small></div></div>`;
+  return `<div class="top"><div><div style="display:flex;align-items:center;gap:4px">
+    <h1>${esc(EVENT.shortName)}</h1>
+    <button class="lnk" data-act="toggleEventMenu" aria-label="Options de la course" aria-expanded="${eventMenuOpen}" style="padding:4px 8px;font-size:18px;min-height:32px">⋮</button>
+  </div><div class="sub">${esc(S.profile.name)} · ${EVENT.dateLabel}</div></div><div class="count">J-${left}<small>avant le départ</small></div></div>${eventMenuPanel()}`;
+}
+function eventMenuPanel() {
+  if (confirmDeleteEventId === EVENT.id) {
+    return `<div class="warnbox"><b>Supprimer "${esc(EVENT.name)}" ?</b><p class="note" style="margin:4px 0 8px">Tout ton plan et tes séances faites pour cette course seront perdus définitivement. Cette action ne peut pas être annulée.</p>
+      <div class="row"><button class="btn" data-act="deleteEvent" data-id="${esc(EVENT.id)}" style="background:var(--warn)">Oui, supprimer définitivement</button><button class="btn alt" data-act="cancelDeleteEvent">Annuler</button></div></div>`;
+  }
+  if (!eventMenuOpen) return '';
+  return `<div class="card" style="padding:6px;margin-top:6px"><button class="lnk" data-act="askDeleteEvent" data-id="${esc(EVENT.id)}" style="color:var(--warn);display:block;width:100%;text-align:left;padding:10px 12px">Supprimer cette course</button></div>`;
 }
 function dashHead() {
   return `<div class="top"><div><h1>${esc(S.profile.name)}</h1><div class="sub">Choisis ton objectif pour commencer</div></div></div>`;
@@ -433,10 +462,11 @@ function eventSearchForm() {
 /* ---- Étape 1 : profil sportif générique (indépendant de toute course) ---- */
 function onboardProfile(editing) {
   const p = S.profile || {name:'', fullName:'', ageRange:'25-34', activityLevel:'leger', sports:[], injuryAreas:[], limits:'',
-    sessionDuration:'', constraints:''};
+    sportContinue:'', sportWeekdays:[], sessionDuration:'', constraints:''};
   const opt = (arr, v) => arr.map(([val, t]) => `<option value="${val}" ${val == v ? 'selected' : ''}>${t}</option>`).join('');
   const chk = (attr, val, label, checked) => `<label class="chkrow"><input type="checkbox" value="${val}" ${attr}="1" ${checked ? 'checked' : ''}> ${label}</label>`;
   const inj = (val, label) => chk('data-inj', val, label, p.injuryAreas.includes(val));
+  const wd = val => chk('data-wd', val, val, (p.sportWeekdays || []).includes(val));
   const hasInjuryInfo = p.injuryAreas.length > 0 || !!(p.limits && p.limits.trim());
   return `<div class="top"><div><h1>${editing ? 'Mon profil' : 'Ton profil'}</h1><div class="sub">Profil sportif général</div></div></div>
   <p class="note">D'abord quelques questions sur toi en général — indépendantes de la course. Tu pourras tout modifier ensuite.</p>
@@ -455,6 +485,11 @@ function onboardProfile(editing) {
       <datalist id="sportsList">${SPORTS_LIST.map(s => `<option value="${esc(s)}">`).join('')}</datalist>
       <div id="sportChips" class="row" style="margin:0">${p.sports.map(sportChipHtml).join('')}</div>
       <input type="hidden" id="f-sports-json" value='${esc(JSON.stringify(p.sports))}'>
+    </div>
+    <div class="fld"><label for="f-sport-continue">Veux-tu continuer cette pratique pendant la préparation ?</label><select id="f-sport-continue">${opt([['',"Non / je ne sais pas encore"],['oui',"Oui"]], p.sportContinue)}</select></div>
+    <div class="fld" id="fld-sport-weekdays" ${p.sportContinue === 'oui' ? '' : 'hidden'}><label>Quels jours ?</label>
+      ${wd('Lun')}${wd('Mar')}${wd('Mer')}${wd('Jeu')}${wd('Ven')}${wd('Sam')}${wd('Dim')}
+      <p class="note" style="margin:4px 0 0">Si c'est pertinent pour ta course (ex. ton sport travaille déjà le haut du corps ou le cardio), le plan en tiendra compte pour ne pas te faire refaire la même chose en double.</p>
     </div>
     <details class="disc" ${hasInjuryInfo ? 'open' : ''}>
       <summary>Blessures passées ou actuelles à surveiller <span class="priv">· privé, jamais partagé</span></summary>
@@ -496,7 +531,7 @@ function onboardEvent(editing) {
   </div>
 
   <p class="note">Cette app donne un cadre général d'entraînement, pas un avis médical. Si tu as une pathologie, une douleur qui persiste ou un doute, consulte un médecin avant de commencer cette préparation.</p>
-  <div class="row"><button class="btn" data-act="saveEvent">${editing ? 'Enregistrer' : 'Continuer'}</button>${editing ? '<button class="btn alt" data-act="tab" data-v="moi">Annuler</button>' : '<button class="btn alt" data-act="editProfile">‹ Modifier mon profil</button>'}</div>`;
+  <div class="row"><button class="btn" data-act="saveEvent">${editing ? 'Enregistrer' : 'Continuer'}</button>${editing ? '<button class="btn alt" data-act="tab" data-v="moi">Annuler</button>' : '<button class="btn alt" data-act="editProfile">‹ Modifier mon profil</button><button class="btn alt" data-act="backEvent" data-id="' + esc(EVENT.id) + '">‹ Retour (choisir une autre course)</button>'}</div>`;
 }
 
 /* ---- Étape 3 : génération du plan par Claude (pas de formule, un vrai raisonnement sur le profil complet) ---- */
@@ -504,6 +539,11 @@ function planPrompt() {
   const p = S.profile, a = ev().assess, startIdx = ev().startIdx;
   const injTxt = p.injuryAreas.length ? p.injuryAreas.join(', ') + (p.limits ? ' — ' + p.limits : '') : (p.limits || 'aucune connue');
   const sportsTxt = p.sports.length ? p.sports.join(', ') : 'aucun autre sport pratiqué actuellement';
+  const sportContinueTxt = p.sportContinue === 'oui'
+    ? ((p.sportWeekdays || []).length
+        ? `Oui, ${p.sportWeekdays.length} jour(s)/semaine (${p.sportWeekdays.join(', ')}). IMPORTANT : ces jours sont entièrement pris par cette pratique (ce sont deux budgets de jours séparés, ne compte pas ces jours dans le maximum ci-dessous). Pour CHAQUE semaine du plan, place à CHACUN de ces jours UN SEUL objet dans "sessions" (ne mets rien d'autre ce jour-là, pas de séance de préparation en plus) avec le nom du sport comme titre (ex. "Rugby"), type "sport-perso", une description courte du type "Ta séance de ${sportsTxt} habituelle, maintenue en parallèle de la préparation", "run": false (sauf si ce sport est lui-même une pratique de course à pied, alors "run": true), et une durée approximative raisonnable pour ce sport. Le but : que la personne voie toute sa semaine réelle dans le planning, pas seulement les séances spécifiques à la course.`
+        : `Oui, jours non précisés.`) + ` Si cette pratique développe déjà une qualité utile pour la course (ex. haut du corps, cardio, grip, jambes), allège ou retire ce qui ferait doublon dans le plan plutôt que de le prescrire en plus.`
+    : 'Non, ou pas précisé — pas de contrainte de jours à prévoir pour une pratique existante.';
   const phasesTxt = EVENT.phases.map((ph, k) => `- ${ph} : semaines ${EVENT.phaseStart[k] + 1} à ${EVENT.phaseStart[k + 1] || EVENT.nw}`).join('\n');
   return `Tu es coach sportif. Prépare un plan d'entraînement détaillé, semaine par semaine, pour cette course :
 
@@ -516,6 +556,7 @@ La semaine ${EVENT.nw} est la semaine de course, je la gère déjà séparément
 PROFIL DE LA PERSONNE :
 - Âge : ${p.ageRange} · Niveau d'activité actuel : ${p.activityLevel}
 - Sports pratiqués actuellement : ${sportsTxt}
+- Souhaite continuer cette pratique pendant la préparation : ${sportContinueTxt}
 - Expérience de courses d'endurance : ${a.pastEndurance}
 - Blessures / limites à prendre en compte (reste privé, ne jamais partager avec d'autres) : ${injTxt}
 - Aujourd'hui, plus longue durée de course sans s'arrêter : ${a.longest} min
@@ -527,19 +568,20 @@ PROFIL DE LA PERSONNE :
 
 CE QUE J'ATTENDS :
 - Une vraie progression personnalisée, pas un programme générique : si la personne est sédentaire ou débutante, démarre doucement et progresse prudemment (pas de saut brutal de volume). Si une pratique actuelle couvre déjà une partie de la préparation (ex. musculation, escalade, vélo), n'en rajoute pas une version redondante par-dessus — adapte ou remplace.
-- Jamais plus de ${a.maxDays} séances sur une même semaine, sur des jours différents (Lun/Mar/Mer/Jeu/Ven/Sam/Dim). RÈGLE STRICTE sur la fréquence, pas seulement la durée : la semaine 1 doit démarrer à AU MOINS 2 séances de moins que ${a.maxDays} (minimum 3 séances au tout début, jamais le maximum direct dès le départ, même si la personne se dit "sportif confirmé"). Ajoute une séance supplémentaire progressivement au fil des semaines, et n'atteins ${a.maxDays} séances que plus tard dans la préparation (pas avant le milieu de la phase Volume, sauf si ${a.maxDays} est déjà bas, 3 ou moins). La fréquence est une vraie variable de progression, au même titre que la durée — ne te contente jamais d'augmenter seulement la durée des séances à nombre de séances fixe.
+- Jamais plus de ${a.maxDays} séances de préparation sur une même semaine, sur des jours différents (Lun/Mar/Mer/Jeu/Ven/Sam/Dim) — les séances de type "sport-perso" ne comptent pas dans ce total, ce sont des jours déjà pris par ailleurs. RÈGLE STRICTE sur la fréquence, pas seulement la durée : la semaine 1 doit démarrer à AU MOINS 2 séances de moins que ${a.maxDays} (minimum 3 séances au tout début, jamais le maximum direct dès le départ, même si la personne se dit "sportif confirmé"). Ajoute une séance supplémentaire progressivement au fil des semaines, et n'atteins ${a.maxDays} séances que plus tard dans la préparation (pas avant le milieu de la phase Volume, sauf si ${a.maxDays} est déjà bas, 3 ou moins). La fréquence est une vraie variable de progression, au même titre que la durée — ne te contente jamais d'augmenter seulement la durée des séances à nombre de séances fixe.
 - Marque les semaines de récupération/allégées que tu juges utiles ("rec": true).
 - Séances de course réalistes et progressives ; séances de renfo avec des exercices concrets adaptés au niveau réel de la personne, pas un texte générique.
 
 RÉPONDS UNIQUEMENT avec un bloc de code JSON, un objet par semaine, dans ce format exact :
 [
   {"i": ${startIdx}, "rec": false, "sessions": [
+    {"day": "Lun", "type": "sport-perso", "title": "Rugby", "desc": "Ta séance de rugby habituelle, maintenue en parallèle de la préparation", "min": 90, "run": false},
     {"day": "Mar", "type": "course", "title": "Sortie facile", "desc": "Description concrète de la séance", "min": 30, "run": true},
     {"day": "Jeu", "type": "renfo", "title": "...", "desc": "...", "min": 25, "run": false}
   ]},
   ...
 ]
-("i" = numéro de semaine en partant de 0, de ${startIdx} à ${EVENT.nw - 2} inclus. "run": true seulement pour les séances qui comptent dans le volume de course hebdomadaire.)`;
+("i" = numéro de semaine en partant de 0, de ${startIdx} à ${EVENT.nw - 2} inclus. "run": true seulement pour les séances qui comptent dans le volume de course hebdomadaire. L'exemple du lundi "Rugby" n'est qu'une illustration du format sport-perso décrit plus haut — adapte-le au vrai sport de la personne, ou omets-le complètement si elle n'a pas demandé à continuer une pratique.)`;
 }
 
 function genPlanView() {
@@ -551,7 +593,7 @@ function genPlanView() {
     <p class="note" style="margin:0 0 8px">Colle ce texte dans une conversation avec Claude (claude.ai ou l'app Claude), laisse-le te faire ton plan, puis colle sa réponse ci-dessous.</p>
     <textarea id="f-plan-json" placeholder="Colle ici la réponse de Claude (le bloc de code JSON)" style="min-height:160px;font-size:13px"></textarea>
     <p class="note" id="planImportMsg" style="color:var(--warn);margin:4px 0 0"></p>
-    <div class="row"><button class="btn" data-act="importPlan">2. Importer mon plan</button>${canCancel ? '<button class="btn alt" data-act="tab" data-v="moi">Annuler</button>' : ''}</div>
+    <div class="row"><button class="btn" data-act="importPlan">2. Importer mon plan</button>${canCancel ? '<button class="btn alt" data-act="tab" data-v="moi">Annuler</button>' : '<button class="btn alt" data-act="backEvent" data-id="' + esc(EVENT.id) + '">‹ Retour (choisir une autre course)</button>'}</div>
   </div>`;
 }
 
@@ -610,8 +652,7 @@ function athStats(d) {
 }
 function grpView() {
   let h = `<div class="top" style="padding-bottom:0"><div><h1>Le groupe</h1></div></div>`;
-  if (!Store.ok) return h + `<div class="card note">La vue de groupe nécessite d'ouvrir cette app avec ton compte Claude, après avoir été invité par le créateur de l'app. Tes entraînements restent enregistrés sur ton téléphone en attendant.</div>`;
-  if (!Store.canWrite) h += `<div class="card note">Tu peux consulter le groupe, mais ton niveau d'accès ne permet pas de partager tes données.</div>`;
+  if (!Store.ok) return h + `<div class="card note">La vue de groupe nécessite un compte (gratuit). Va dans l'onglet "Moi" pour en créer un. Tes entraînements restent enregistrés sur ton téléphone en attendant.</div>`;
   if (!S.share) h += `<div class="card note">Tu ne partages pas tes données. Active le partage dans l'onglet Moi pour apparaître ici.</div>`;
   if (!GROUP.length) return h + `<div class="card note">Personne n'a encore partagé son plan.</div>`;
   GROUP.slice().sort((a, b) => (a.data.name || '').localeCompare(b.data.name || '')).forEach(g => {
@@ -638,17 +679,38 @@ function grpView() {
   return h;
 }
 
+function recoveryView() {
+  return `<div class="top"><div><h1>Nouveau mot de passe</h1></div></div>
+  <div class="card"><p class="note" style="margin:4px 0 8px">Choisis un nouveau mot de passe pour ton compte${Store.email ? ' (' + esc(Store.email) + ')' : ''}.</p>
+  ${authMsg ? `<p class="note" style="color:var(--warn)">${esc(authMsg)}</p>` : ''}
+  <div class="fld"><label for="f-auth-pw2">Nouveau mot de passe</label><input id="f-auth-pw2" type="password" autocomplete="new-password" minlength="6"></div>
+  <div class="row"><button class="btn" data-act="authSetNewPassword">Valider</button></div></div>`;
+}
+function accountCard() {
+  if (Store.ok) return `<div class="card"><b>Compte</b><p class="note" style="margin:4px 0 8px">Connecté : ${esc(Store.email || '')}. Tes données se synchronisent automatiquement entre tes appareils.</p>
+    <div class="row"><button class="btn alt" data-act="authLogout">Se déconnecter</button></div></div>`;
+  return `<div class="card"><b>Compte</b><p class="note" style="margin:4px 0 8px">Crée un compte gratuit pour synchroniser tes données entre appareils et apparaître dans le groupe.</p>
+  ${authMsg ? `<p class="note" style="color:var(--warn)">${esc(authMsg)}</p>` : ''}
+  <div class="fld"><label for="f-auth-email">Email</label><input id="f-auth-email" type="email" autocomplete="email"></div>
+  <div class="fld"><label for="f-auth-pw">Mot de passe</label><input id="f-auth-pw" type="password" autocomplete="${authMode === 'signup' ? 'new-password' : 'current-password'}" minlength="6"></div>
+  <div class="row">${authMode === 'signup'
+    ? `<button class="btn" data-act="authSignup">Créer mon compte</button><button class="lnk" data-act="authModeLogin">J'ai déjà un compte</button>`
+    : `<button class="btn" data-act="authSignin">Se connecter</button><button class="lnk" data-act="authModeSignup">Créer un compte</button>`}</div>
+  <button class="lnk" data-act="authForgot" style="padding:4px 8px">Mot de passe oublié ?</button></div>`;
+}
 function moiView() {
   const P = S.profile, E = ev();
   const profileCard = (E && E.plan)
     ? `<div class="card"><b>${esc(P.name)}</b>${P.fullName ? ` <span class="note">${esc(P.fullName)}</span>` : ''}<p class="note" style="margin:4px 0 0">${E.assess.maxDays} jours max par semaine · départ du plan : semaine ${E.startIdx + 1}</p>
       <p class="note" style="margin:8px 0 0">Série en cours : ${streak()} semaine${streak() > 1 ? 's' : ''} à 75 % de séances faites ou plus.</p>
-      <div class="row"><button class="btn alt" data-act="editProfile">Modifier mon profil</button><button class="btn alt" data-act="editEvent">Modifier mon évaluation ${esc(EVENT.shortName)}</button><button class="btn alt" data-act="genPlan">Régénérer mon plan avec Claude</button></div></div>`
+      <div class="row"><button class="btn alt" data-act="editProfile">Modifier mon profil</button><button class="btn alt" data-act="editEvent">Modifier mon évaluation ${esc(EVENT.shortName)}</button><button class="btn alt" data-act="genPlan">Régénérer mon plan avec Claude</button></div>
+      <p class="note" style="margin:8px 0 0">Pour supprimer cette course, utilise le menu "⋮" à côté du titre en haut de l'écran.</p></div>`
     : `<div class="card"><b>${esc(P.name)}</b>${P.fullName ? ` <span class="note">${esc(P.fullName)}</span>` : ''}<p class="note" style="margin:8px 0 0">Tu n'as pas encore choisi d'objectif.</p>
       <div class="row"><button class="btn alt" data-act="editProfile">Modifier mon profil</button></div></div>
       ${eventsDashboard()}`;
   return `<div class="top" style="padding-bottom:0"><div><h1>Moi</h1></div></div>
   ${profileCard}
+  ${accountCard()}
   <div class="card"><b>Partage avec le groupe</b><p class="note" style="margin:4px 0 8px">Le groupe de l'Ultra Morzine voit ton pseudo (et ton nom complet si tu l'as renseigné), ton plan Morzine, tes séances faites, durées, km et D+ — tes autres courses restent privées. Jamais tes douleurs, fatigue, notes ni limites.</p>
   <div class="row"><button class="btn ${S.share ? '' : 'alt'}" data-act="share">${S.share ? 'Partage activé · désactiver' : 'Partage désactivé · activer'}</button></div></div>
   <div class="card"><b>Sauvegarde</b><p class="note" style="margin:4px 0 8px">Copie tes données pour les conserver ou les restaurer.</p>
@@ -659,6 +721,7 @@ function moiView() {
 
 function render() {
   const y = window.scrollY, app = $('#app'), nav = $('#nav');
+  if (authMode === 'recovery') { app.innerHTML = recoveryView(); nav.hidden = true; return; }
   if (!S.profile) { app.innerHTML = onboardProfile(false); nav.hidden = true; return; }
   if (tab === 'editProfile') { app.innerHTML = onboardProfile(true); nav.hidden = true; return; }
 
@@ -732,9 +795,11 @@ document.addEventListener('click', async e => {
     const name = $('#f-name').value.trim();
     if (!name) { $('#f-name').focus(); return; }
     const injuryAreas = Array.from(document.querySelectorAll('[data-inj]:checked')).map(c => c.value);
+    const sportWeekdays = Array.from(document.querySelectorAll('[data-wd]:checked')).map(c => c.value);
     let sports = []; try { sports = JSON.parse($('#f-sports-json').value || '[]'); } catch (e) {}
     const p = {
       name, fullName:$('#f-fullname').value.trim(), ageRange:$('#f-age').value, activityLevel:$('#f-activity').value, sports,
+      sportContinue:$('#f-sport-continue').value, sportWeekdays,
       injuryAreas, limits:$('#f-limits').value,
       sessionDuration:$('#f-dur').value, constraints:$('#f-constraints').value
     };
@@ -754,7 +819,27 @@ document.addEventListener('click', async e => {
     ensureEvent(); S.viewEventId = id; cur = weekOf(new Date()); vw = cur;
     persist(); tab = 'sem'; render(); return;
   }
-  if (a === 'switchEvent') { S.viewEventId = b.dataset.id; persist(); tab = 'sem'; render(); return; }
+  if (a === 'switchEvent') { S.viewEventId = b.dataset.id; eventMenuOpen = false; confirmDeleteEventId = null; persist(); tab = 'sem'; render(); return; }
+  if (a === 'backEvent') {
+    // Avant d'avoir un plan, rien de précieux n'est en jeu : retour simple, sans confirmation.
+    const id = b.dataset.id || S.viewEventId; if (!id) return;
+    delete S.events[id];
+    if (S.customEvents[id]) delete S.customEvents[id];
+    if (S.viewEventId === id) S.viewEventId = null;
+    persist(); tab = 'sem'; render(); return;
+  }
+  if (a === 'toggleEventMenu') { eventMenuOpen = !eventMenuOpen; render(); return; }
+  if (a === 'askDeleteEvent') { confirmDeleteEventId = b.dataset.id; eventMenuOpen = false; render(); return; }
+  if (a === 'cancelDeleteEvent') { confirmDeleteEventId = null; render(); return; }
+  if (a === 'deleteEvent') {
+    // N'arrive qu'après confirmation explicite dans le petit menu "⋮" (double vérification déjà faite côté UI).
+    const id = b.dataset.id || S.viewEventId; if (!id) return;
+    delete S.events[id];
+    if (S.customEvents[id]) delete S.customEvents[id];
+    if (S.viewEventId === id) S.viewEventId = null;
+    confirmDeleteEventId = null; eventMenuOpen = false;
+    persist(); tab = 'sem'; render(); return;
+  }
   if (a === 'addEvent') { tab = 'addEvent'; render(); return; }
   if (a === 'copyEventSearch') {
     const name = $('#f-evt-name').value.trim();
@@ -822,7 +907,7 @@ document.addEventListener('click', async e => {
   if (a === 'genPlan') { tab = 'genPlan'; render(); return; }
   if (a === 'editProfile') { tab = 'editProfile'; render(); return; }
   if (a === 'editEvent') { tab = 'editEvent'; render(); return; }
-  if (a === 'tab') { tab = b.dataset.v; if (tab === 'grp') ensureGroup(); render(); window.scrollTo(0, 0); return; }
+  if (a === 'tab') { tab = b.dataset.v; eventMenuOpen = false; if (tab === 'grp') ensureGroup(); render(); window.scrollTo(0, 0); return; }
   if (a === 'wk') { vw = Math.max(0, Math.min(EVENT.nw - 1, vw + +b.dataset.d)); openId = null; render(); return; }
   if (a === 'jump') { vw = +b.dataset.i; openId = null; tab = 'sem'; render(); window.scrollTo(0, 0); return; }
   if (a === 'open') { openId = openId === b.dataset.id ? null : b.dataset.id; render(); return; }
@@ -846,10 +931,63 @@ document.addEventListener('click', async e => {
     location.reload();
     return;
   }
+  if (a === 'authModeSignup') { authMode = 'signup'; authMsg = ''; render(); return; }
+  if (a === 'authModeLogin') { authMode = null; authMsg = ''; render(); return; }
+  if (a === 'authForgot') {
+    if (!sb) return noNet();
+    const email = ($('#f-auth-email') || {}).value || '';
+    if (!email) { authMsg = "Entre ton email d'abord."; render(); return; }
+    authMsg = 'Envoi en cours...'; render();
+    try {
+      const { error } = await sb.auth.resetPasswordForEmail(email, {redirectTo: location.origin + location.pathname});
+      if (error) throw error;
+      authMsg = 'Email envoyé — vérifie ta boîte de réception.';
+    } catch (er) { authMsg = 'Erreur : ' + (er.message || er); }
+    render(); return;
+  }
+  if (a === 'authSignup') {
+    if (!sb) return noNet();
+    const email = $('#f-auth-email').value.trim(), pw = $('#f-auth-pw').value;
+    if (!email || pw.length < 6) { authMsg = 'Email et mot de passe (6 caractères min.) requis.'; render(); return; }
+    authMsg = 'Création du compte...'; render();
+    try {
+      const { error } = await sb.auth.signUp({email, password: pw});
+      if (error) throw error;
+      authMode = null; authMsg = 'Compte créé ! Vérifie tes emails pour confirmer, puis connecte-toi.';
+    } catch (er) { authMsg = 'Erreur : ' + (er.message || er); }
+    render(); return;
+  }
+  if (a === 'authSignin') {
+    if (!sb) return noNet();
+    const email = $('#f-auth-email').value.trim(), pw = $('#f-auth-pw').value;
+    if (!email || !pw) { authMsg = 'Email et mot de passe requis.'; render(); return; }
+    authMsg = 'Connexion...'; render();
+    try { const { error } = await sb.auth.signInWithPassword({email, password: pw}); if (error) throw error; }
+    catch (er) { authMsg = 'Erreur : ' + (er.message || er); render(); }
+    return;
+  }
+  if (a === 'authSetNewPassword') {
+    if (!sb) return noNet();
+    const pw = $('#f-auth-pw2').value;
+    if (pw.length < 6) { authMsg = 'Mot de passe trop court (6 caractères min.).'; render(); return; }
+    authMsg = 'Mise à jour...'; render();
+    try {
+      const { error } = await sb.auth.updateUser({password: pw});
+      if (error) throw error;
+      authMode = null; tab = 'moi'; authMsg = '';
+    } catch (er) { authMsg = 'Erreur : ' + (er.message || er); }
+    render(); return;
+  }
+  if (a === 'authLogout') { if (!sb) return noNet(); try { await sb.auth.signOut(); } catch (e) {} return; }
   if (a === 'gopen') { gOpen = gOpen === b.dataset.id ? null : b.dataset.id; gWeek = cur; render(); return; }
   if (a === 'gwk') { gWeek = Math.max(0, Math.min(EVENT.nw - 1, gWeek + +b.dataset.d)); render(); return; }
 });
 document.addEventListener('change', e => {
+  if (e.target.id === 'f-sport-continue') {
+    const d2 = $('#fld-sport-weekdays');
+    if (d2) d2.hidden = e.target.value !== 'oui';
+    return;
+  }
   const f = e.target.dataset && e.target.dataset.f; if (!f) return;
   const L = ev().log, l = L[e.target.dataset.id] || (L[e.target.dataset.id] = {});
   l[f] = e.target.value; persist(); render();
@@ -865,22 +1003,31 @@ function ensureGroup() {
   if (groupSub || !Store.ok) return;
   try { groupSub = Store.subscribe(list => { GROUP = list; if (tab === 'grp') render(); }); } catch (e) {}
 }
-async function boot() {
-  try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(S, JSON.parse(raw)); } catch (e) {}
-  syncActiveEvent(); rebuild(); if (S.profile && ev()) vw = Math.max(cur, ev().startIdx); render();
-  await Store.init();
-  if (!Store.ok) return;
+async function syncFromRemote() {
   try {
     const r = await Store.loadMine();
     if (r && r.json) {
       const remote = JSON.parse(r.json);
       if ((remote.updated || 0) > (S.updated || 0)) {
         S = remote; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
-        syncActiveEvent(); rebuild(); if (S.profile && ev()) vw = Math.max(cur, ev().startIdx); render();
+        syncActiveEvent(); rebuild(); if (S.profile && ev()) vw = Math.max(cur, ev().startIdx);
       } else if (S.profile) { dirty = true; flush(); }
     } else if (S.profile) { dirty = true; flush(); }
   } catch (e) {}
-  if (tab === 'grp') ensureGroup();
+}
+async function boot() {
+  try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(S, JSON.parse(raw)); } catch (e) {}
+  syncActiveEvent(); rebuild(); if (S.profile && ev()) vw = Math.max(cur, ev().startIdx); render();
+  await Store.init();
+  if (Store.ok) { await syncFromRemote(); render(); if (tab === 'grp') ensureGroup(); }
+  if (sb) sb.auth.onAuthStateChange((event, session) => {
+    Store.uid = session ? session.user.id : null;
+    Store.email = session ? session.user.email : null;
+    Store.ok = !!Store.uid;
+    if (event === 'PASSWORD_RECOVERY') { authMode = 'recovery'; render(); return; }
+    if (event === 'SIGNED_IN') { authMode = null; authMsg = ''; syncFromRemote().then(() => { ensureGroup(); render(); }); return; }
+    if (event === 'SIGNED_OUT') { GROUP = []; if (groupSub) { try { groupSub.unsubscribe(); } catch (e) {} groupSub = null; } render(); }
+  });
 }
 boot();
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('service-worker.js').catch(() => {}); }
