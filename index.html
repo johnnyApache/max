@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ultra Morzine — suivi d'entraînement</title>
+<title>Max — ton assistant sportif</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <meta name="theme-color" content="#214C42">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Ultra Morzine">
+<meta name="apple-mobile-web-app-title" content="Max">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Big+Shoulders+Display:wght@600;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#ECEEE8; --card:#F7F8F4; --ink:#16252A; --mute:#5C6A68; --line:#D2D8D1;
@@ -106,9 +106,27 @@ svg{width:100%;height:auto;display:block}
 .legend{display:flex;gap:14px;font-size:12px;color:var(--mute);margin-top:4px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 @media (prefers-reduced-motion:no-preference){.bar i{transition:width .3s}}
+
+/* Écran de lancement : logo "MAX" animé, visible une fraction de seconde au démarrage puis retiré (en CSS pur, pas de JS). */
+#splash{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:#FF5A1F;animation:splashOut .5s ease-in .9s forwards}
+#splash svg{width:min(72vw,380px);height:auto;animation:splashIn .6s cubic-bezier(.2,.9,.3,1) both}
+@keyframes splashIn{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+@keyframes splashOut{to{opacity:0;visibility:hidden;pointer-events:none}}
+@media (prefers-reduced-motion:reduce){#splash{animation-duration:.01s}#splash svg{animation-duration:.01s}}
 </style>
 </head>
 <body>
+<div id="splash" aria-hidden="true">
+  <svg viewBox="0 0 420 170" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="splashScratch" x="-30%" y="-30%" width="160%" height="160%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="2" seed="6" result="noise"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+    <text x="210" y="128" text-anchor="middle" font-family="'Archivo Black',sans-serif" font-size="130" fill="#000" filter="url(#splashScratch)">MAX</text>
+  </svg>
+</div>
 <div id="app"></div>
 <nav class="tabs" id="nav" hidden></nav>
 <div id="modal"></div>
@@ -412,7 +430,7 @@ function eventMenuPanel() {
   return `<div class="card" style="padding:6px;margin-top:6px"><button class="lnk" data-act="askDeleteEvent" data-id="${esc(EVENT.id)}" style="color:var(--warn);display:block;width:100%;text-align:left;padding:10px 12px">Supprimer cette course</button></div>`;
 }
 function dashHead() {
-  return `<div class="top"><div><h1>${esc(S.profile.name)}</h1><div class="sub">Choisis ton objectif pour commencer</div></div></div>`;
+  return `<div class="top"><div><h1>${esc(S.profile.name)}</h1><div class="sub">Donne ton Max — choisis ton objectif pour commencer</div></div></div>`;
 }
 /* Petite barre pour passer d'une course déjà commencée à une autre, visible dès qu'il y en a au moins une. */
 function eventSwitcherRow() {
@@ -468,8 +486,8 @@ function onboardProfile(editing) {
   const inj = (val, label) => chk('data-inj', val, label, p.injuryAreas.includes(val));
   const wd = val => chk('data-wd', val, val, (p.sportWeekdays || []).includes(val));
   const hasInjuryInfo = p.injuryAreas.length > 0 || !!(p.limits && p.limits.trim());
-  return `<div class="top"><div><h1>${editing ? 'Mon profil' : 'Ton profil'}</h1><div class="sub">Profil sportif général</div></div></div>
-  <p class="note">D'abord quelques questions sur toi en général — indépendantes de la course. Tu pourras tout modifier ensuite.</p>
+  return `<div class="top"><div>${editing ? '' : '<span class="chip" style="margin-bottom:8px">Max · ton assistant sportif</span><br>'}<h1>${editing ? 'Mon profil' : 'Ton profil'}</h1><div class="sub">Profil sportif général</div></div></div>
+  <p class="note">${editing ? "D'abord quelques questions sur toi en général — indépendantes de la course. Tu pourras tout modifier ensuite." : "Donne-moi quelques infos sur toi, et je m'occupe de construire ton plan. Tu pourras tout modifier ensuite."}</p>
 
   <div class="card">
     <h3 style="font-size:17px;margin-bottom:8px">Toi</h3>
@@ -708,7 +726,7 @@ function moiView() {
     : `<div class="card"><b>${esc(P.name)}</b>${P.fullName ? ` <span class="note">${esc(P.fullName)}</span>` : ''}<p class="note" style="margin:8px 0 0">Tu n'as pas encore choisi d'objectif.</p>
       <div class="row"><button class="btn alt" data-act="editProfile">Modifier mon profil</button></div></div>
       ${eventsDashboard()}`;
-  return `<div class="top" style="padding-bottom:0"><div><h1>Moi</h1></div></div>
+  return `<div class="top" style="padding-bottom:0"><div><h1>Moi</h1><div class="sub">Avec Max, ton assistant sportif</div></div></div>
   ${profileCard}
   ${accountCard()}
   <div class="card"><b>Partage avec le groupe</b><p class="note" style="margin:4px 0 8px">Le groupe de l'Ultra Morzine voit ton pseudo (et ton nom complet si tu l'as renseigné), ton plan Morzine, tes séances faites, durées, km et D+ — tes autres courses restent privées. Jamais tes douleurs, fatigue, notes ni limites.</p>

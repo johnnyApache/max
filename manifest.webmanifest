@@ -1,7 +1,7 @@
 {
-  "name": "Ultra Morzine — suivi d'entraînement",
-  "short_name": "Ultra Morzine",
-  "description": "Suivi d'entraînement pour l'Ultra Spartan Morzine-Avoriaz",
+  "name": "Max — ton assistant sportif",
+  "short_name": "Max",
+  "description": "Max, ton assistant d'entraînement pour l'Ultra Spartan Morzine-Avoriaz et tes autres courses",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
