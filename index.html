@@ -7,42 +7,34 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<meta name="theme-color" content="#214C42">
+<meta name="theme-color" content="#121412">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Max">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Big+Shoulders+Display:wght@600;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#ECEEE8; --card:#F7F8F4; --ink:#16252A; --mute:#5C6A68; --line:#D2D8D1;
-  --pine:#214C42; --ice:#5E93A8; --lichen:#9FB03A; --warn:#B4452F; --onpine:#F2F5EF;
-  --head:'Big Shoulders Display','Arial Narrow',Impact,sans-serif;
-  --body:'Instrument Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --bg:#121412; --card:#1C201C; --surface2:#232822; --ink:#F3F0E6; --mute:#92998E; --line:rgba(243,240,230,.12);
+  --pine:#FF5A1F; --ice:#4F8FB8; --lichen:#8FB83E; --warn:#E24444; --onpine:#1A0D06;
+  --head:'Anton','Arial Narrow',Impact,sans-serif;
+  --body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#11191B; --card:#1A2427; --ink:#E7EDE8; --mute:#93A29E; --line:#2B393C;
-    --pine:#6DB39D; --ice:#7DB0C4; --lichen:#C3D060; --warn:#E3806B; --onpine:#11191B;
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#11191B; --card:#1A2427; --ink:#E7EDE8; --mute:#93A29E; --line:#2B393C;
-  --pine:#6DB39D; --ice:#7DB0C4; --lichen:#C3D060; --warn:#E3806B; --onpine:#11191B;
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;padding-bottom:84px}
 #app{max-width:560px;margin:0 auto;padding:0 16px}
-h1,h2,h3{font-family:var(--head);font-weight:800;letter-spacing:.01em;margin:0;line-height:1.05}
+h1,h2,h3{font-family:var(--head);font-weight:400;letter-spacing:.01em;margin:0;line-height:1.05}
 button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
-.top{display:flex;align-items:flex-end;justify-content:space-between;padding:20px 0 12px}
+.top{position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:space-between;margin:0 -16px;padding:22px 16px 26px;background:var(--surface2);clip-path:polygon(0 0,100% 0,100% 100%,0 92%)}
+.top::before{content:'';position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(98deg,transparent 0 17px,rgba(243,240,230,.035) 17px 18px)}
+.top>*{position:relative}
 .top h1{font-size:30px}
 .top .sub{color:var(--mute);font-size:13px}
-.count{font-family:var(--head);font-weight:800;font-size:34px;color:var(--pine);text-align:right;line-height:1}
+.count{font-family:var(--head);font-weight:400;font-size:34px;color:var(--pine);text-align:right;line-height:1}
 .count small{display:block;font-family:var(--body);font-weight:500;font-size:12px;color:var(--mute)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:12px 0}
 .wknav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0}
@@ -54,7 +46,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .sportchip{display:inline-flex;align-items:center;gap:4px;padding:4px 6px 4px 10px}
 .sportchip button{background:none;border:0;color:inherit;font-size:15px;line-height:1;padding:2px;cursor:pointer}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
-.kpis b{display:block;font-family:var(--head);font-size:24px;font-weight:800}
+.kpis b{display:block;font-family:var(--head);font-size:24px;font-weight:400}
 .kpis span{font-size:12px;color:var(--mute)}
 .bar{height:8px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:12px}
 .bar i{display:block;height:100%;background:var(--lichen)}
@@ -64,7 +56,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .chk{flex:none;width:44px;height:44px;border-radius:12px;border:2px solid var(--line);background:transparent;font-size:20px;color:transparent}
 .done .chk{background:var(--pine);border-color:var(--pine);color:var(--onpine)}
 .ses .ti{flex:1;min-width:0}
-.ses .ti b{font-family:var(--head);font-size:21px;font-weight:800;display:block}
+.ses .ti b{font-family:var(--head);font-size:21px;font-weight:400;display:block}
 .ses .ti span{font-size:13px;color:var(--mute)}
 .lnk{background:none;border:0;color:var(--ice);font-weight:600;padding:8px}
 .ses p{margin:0;padding:0 14px 12px;color:var(--mute);font-size:14px}
@@ -86,7 +78,7 @@ nav.tabs button.on{color:var(--pine);box-shadow:inset 0 3px 0 var(--pine)}
 .wlist button{display:flex;width:100%;align-items:center;justify-content:space-between;gap:8px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0;min-height:44px}
 .wlist .cur{border-color:var(--pine)}
 .wlist .mut{color:var(--mute);font-size:13px}
-.phase{margin:14px 0 4px;font-family:var(--head);font-weight:800;font-size:20px}
+.phase{margin:14px 0 4px;font-family:var(--head);font-weight:400;font-size:20px}
 .ath h3{font-size:24px}
 .mini{display:flex;gap:14px;font-size:13px;color:var(--mute);margin-top:6px;flex-wrap:wrap}
 .modal{position:fixed;inset:0;background:rgba(10,16,18,.6);display:flex;align-items:flex-end;justify-content:center;z-index:10}
@@ -108,11 +100,36 @@ svg{width:100%;height:auto;display:block}
 @media (prefers-reduced-motion:no-preference){.bar i{transition:width .3s}}
 
 /* Écran de lancement : logo "MAX" animé, visible une fraction de seconde au démarrage puis retiré (en CSS pur, pas de JS). */
-#splash{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:#FF5A1F;animation:splashOut .5s ease-in .9s forwards}
-#splash svg{width:min(72vw,380px);height:auto;animation:splashIn .6s cubic-bezier(.2,.9,.3,1) both}
-@keyframes splashIn{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
-@keyframes splashOut{to{opacity:0;visibility:hidden;pointer-events:none}}
+#splash{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:#FF5A1F;animation:splashOut .7s cubic-bezier(.4,0,.2,1) 1s forwards}
+#splash svg{width:min(72vw,380px);height:auto;animation:splashIn .85s cubic-bezier(.16,1,.3,1) both}
+@keyframes splashIn{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:scale(1)}}
+@keyframes splashOut{to{opacity:0;transform:scale(1.05);visibility:hidden;pointer-events:none}}
 @media (prefers-reduced-motion:reduce){#splash{animation-duration:.01s}#splash svg{animation-duration:.01s}}
+
+/* Écran "découverte du plan" : bandeaux MAX en diagonale, joué une fois après l'import du plan (voir playReveal()). */
+#reveal{position:fixed;inset:0;z-index:100;background:#121412;overflow:hidden}
+#reveal[hidden]{display:none}
+#reveal .stack{position:absolute;left:-30%;right:-30%;top:50%;transform:translateY(-50%) rotate(-7deg);display:flex;flex-direction:column;gap:4px}
+#reveal .rrow{height:13vw;max-height:60px;min-height:34px;display:flex;align-items:center;overflow:hidden;white-space:nowrap}
+#reveal .rrow span{display:inline-block;font:400 7vw/1 var(--head);letter-spacing:.03em;animation-duration:1s;animation-timing-function:cubic-bezier(.16,1,.3,1);animation-fill-mode:both}
+#reveal .rrow.a{background:#FF5A1F}
+#reveal .rrow.a span{color:#000}
+#reveal .rrow.b{background:#000}
+#reveal .rrow.b span{color:#FF5A1F}
+#reveal .rrow.r span{animation-name:revInR}
+#reveal .rrow.l span{animation-name:revInL}
+@keyframes revInR{from{transform:translateX(105%)}to{transform:translateX(0)}}
+@keyframes revInL{from{transform:translateX(-105%)}to{transform:translateX(0)}}
+#reveal .rrow:nth-child(1) span{animation-delay:0ms}
+#reveal .rrow:nth-child(2) span{animation-delay:90ms}
+#reveal .rrow:nth-child(3) span{animation-delay:180ms}
+#reveal .rrow:nth-child(4) span{animation-delay:270ms}
+#reveal .rrow:nth-child(5) span{animation-delay:360ms}
+#reveal .rrow:nth-child(6) span{animation-delay:450ms}
+#reveal .rrow:nth-child(7) span{animation-delay:540ms}
+#reveal.out{animation:revealOut .7s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes revealOut{to{opacity:0;transform:scale(1.03);visibility:hidden;pointer-events:none}}
+@media (prefers-reduced-motion:reduce){#reveal .rrow span{animation-duration:.01s;animation-delay:0ms!important}#reveal.out{animation-duration:.01s}}
 </style>
 </head>
 <body>
@@ -126,6 +143,17 @@ svg{width:100%;height:auto;display:block}
     </defs>
     <text x="210" y="128" text-anchor="middle" font-family="'Archivo Black',sans-serif" font-size="130" fill="#000" filter="url(#splashScratch)">MAX</text>
   </svg>
+</div>
+<div id="reveal" hidden aria-hidden="true">
+  <div class="stack">
+    <div class="rrow a r"><span>MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX ·</span></div>
+    <div class="rrow b l"><span>MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX ·</span></div>
+    <div class="rrow a r"><span>MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX ·</span></div>
+    <div class="rrow b l"><span>MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX ·</span></div>
+    <div class="rrow a r"><span>MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX ·</span></div>
+    <div class="rrow b l"><span>MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX ·</span></div>
+    <div class="rrow a r"><span>MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX · MAX ·</span></div>
+  </div>
 </div>
 <div id="app"></div>
 <nav class="tabs" id="nav" hidden></nav>
@@ -270,6 +298,14 @@ function syncActiveEvent() {
   // Chaque course a son propre calendrier : "la semaine actuelle" ne veut dire la même chose que dans la course qu'on regarde.
   if (EVENT && EVENT.id !== prevId) { cur = weekOf(new Date()); vw = cur; }
   return !!(S.viewEventId && S.events[S.viewEventId]);
+}
+
+/* Joue une fois l'écran "bandeaux MAX" en diagonale, à la découverte du plan (voir l'action "importPlan"). */
+function playReveal() {
+  const el = $('#reveal');
+  if (!el) return;
+  el.hidden = false; el.classList.remove('out');
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => { el.hidden = true; }, 700); }, 1850);
 }
 
 const Store = {
@@ -480,7 +516,7 @@ function eventSearchForm() {
 /* ---- Étape 1 : profil sportif générique (indépendant de toute course) ---- */
 function onboardProfile(editing) {
   const p = S.profile || {name:'', fullName:'', ageRange:'25-34', activityLevel:'leger', sports:[], injuryAreas:[], limits:'',
-    sportContinue:'', sportWeekdays:[], sessionDuration:'', constraints:''};
+    sportContinue:'', sportWeekdays:[], sessionDuration:'', constraints:'', moreInfo:''};
   const opt = (arr, v) => arr.map(([val, t]) => `<option value="${val}" ${val == v ? 'selected' : ''}>${t}</option>`).join('');
   const chk = (attr, val, label, checked) => `<label class="chkrow"><input type="checkbox" value="${val}" ${attr}="1" ${checked ? 'checked' : ''}> ${label}</label>`;
   const inj = (val, label) => chk('data-inj', val, label, p.injuryAreas.includes(val));
@@ -522,6 +558,11 @@ function onboardProfile(editing) {
     <h3 style="font-size:17px;margin-bottom:8px">Ta disponibilité</h3>
     <div class="fld"><label for="f-dur">Temps disponible par séance (optionnel)</label><select id="f-dur">${opt([['',"Pas de préférence"],[30,"Environ 30 min"],[45,"Environ 45 min"],[60,"Environ 1h"],[90,"1h30 ou plus"]], p.sessionDuration)}</select></div>
     <div class="fld"><label for="f-constraints">Contraintes (salle dispo, extérieur seulement, matériel...) — optionnel</label><textarea id="f-constraints">${esc(p.constraints || '')}</textarea></div>
+  </div>
+
+  <div class="card">
+    <h3 style="font-size:17px;margin-bottom:8px">Dis-nous en plus sur toi</h3>
+    <div class="fld"><label for="f-moreinfo">Une consigne précise que les questions ci-dessus ne couvrent pas — optionnel</label><textarea id="f-moreinfo" placeholder="Ex. je ne suis jamais disponible le premier mardi du mois, j'ai une routine de récupération à respecter, etc.">${esc(p.moreInfo || '')}</textarea></div>
   </div>
 
   <div class="row"><button class="btn" data-act="saveProfile">${editing ? 'Enregistrer' : 'Continuer'}</button>${editing ? '<button class="btn alt" data-act="tab" data-v="moi">Annuler</button>' : ''}</div>`;
@@ -583,6 +624,7 @@ PROFIL DE LA PERSONNE :
 - Jours d'entraînement disponibles par semaine : ${a.maxDays} MAXIMUM — ce n'est pas un nombre fixe, adapte le nombre réel de séances selon la phase et la charge (par exemple moins en début de préparation ou en semaine allégée, jusqu'à ce maximum au pic).
 - Temps disponible par séance : ${p.sessionDuration ? p.sessionDuration + ' min' : 'pas de préférence précisée'}
 - Contraintes : ${p.constraints || 'aucune précisée'}
+- Consignes personnelles supplémentaires (à respecter prioritairement, y compris pour le choix des jours de séance si la personne mentionne une indisponibilité récurrente) : ${p.moreInfo || 'aucune'}
 
 CE QUE J'ATTENDS :
 - Une vraie progression personnalisée, pas un programme générique : si la personne est sédentaire ou débutante, démarre doucement et progresse prudemment (pas de saut brutal de volume). Si une pratique actuelle couvre déjà une partie de la préparation (ex. musculation, escalade, vélo), n'en rajoute pas une version redondante par-dessus — adapte ou remplace.
@@ -819,7 +861,7 @@ document.addEventListener('click', async e => {
       name, fullName:$('#f-fullname').value.trim(), ageRange:$('#f-age').value, activityLevel:$('#f-activity').value, sports,
       sportContinue:$('#f-sport-continue').value, sportWeekdays,
       injuryAreas, limits:$('#f-limits').value,
-      sessionDuration:$('#f-dur').value, constraints:$('#f-constraints').value
+      sessionDuration:$('#f-dur').value, constraints:$('#f-constraints').value, moreInfo:$('#f-moreinfo').value
     };
     S.profile = p; rebuild(); persist(); tab = 'sem'; render(); return;
   }
@@ -916,7 +958,7 @@ document.addEventListener('click', async e => {
       });
       if (!Object.keys(byIndex).length) throw 0;
       ev().plan = byIndex;
-      rebuild(); persist(); tab = 'sem'; vw = Math.max(cur, ev().startIdx); render();
+      rebuild(); persist(); tab = 'sem'; vw = Math.max(cur, ev().startIdx); render(); playReveal();
     } catch (er) {
       const msg = $('#planImportMsg'); if (msg) msg.textContent = "Le texte collé n'est pas reconnu. Vérifie que tu as bien copié tout le bloc JSON renvoyé par Claude.";
     }
